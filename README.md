@@ -52,15 +52,6 @@ Result of the run recorded in `captures/demo-timeline.txt` (the full 60 s scenar
 
 Other variables: `SKY_HOST` (default `127.0.0.1`; use `0.0.0.0` for a real LAN, which may trigger the Windows firewall prompt), `SKY_DATA` (folder for received logs, default `data/`), `SKY_EDGE` (path to `msedge.exe`). The code uses `127.0.0.1` rather than `localhost` on purpose, so that nothing resolves to IPv6 `::1`. A fleet on another machine: `node src/sim/fleet.js --host <station-ip>`.
 
-## Capturing with Wireshark
-
-1. Capture on the interface **"Adapter for loopback traffic capture"** (Npcap), with the capture filter `tcp port 7400 or udp port 7401`.
-2. Run `npm run demo`, stop the capture.
-3. Open it with the dissector, without installing anything:
-   `wireshark -X lua_script:tools/wireshark/skylink.lua -r captures/demo.pcapng`
-   (or copy `skylink.lua` to `%APPDATA%\Wireshark\plugins\`).
-
-Display filters: `slcp`, `slcp.type == 0x10` (COMMAND), `slcp.type == 0x21` (LOG_CHUNK), `slcp.type == 0x22` (LOG_ACK), `tcp.port == 7400 && tcp.flags.reset == 1` (the voluntary RST), `sltp`, `sltp.drone == 4`, `sltp.type == 2 || sltp.type == 3` (echo).
 ## HTTP API
 
 | Route | Description |
@@ -71,16 +62,6 @@ Display filters: `slcp`, `slcp.type == 0x10` (COMMAND), `slcp.type == 0x21` (LOG
 | `POST /api/chaos` | `{"droneId":1,"kind":"udp_loss","pct":15}` or `{"droneId":1,"kind":"cut_tcp"}` returns `{ok}` |
 
 Errors: 400 for bad JSON, action or parameters, 404 for an unknown drone, 413 above 4096 bytes. Static files come from `public/`.
-
-## Screenshots and report
-
-```
-npm run shots        # plays the demo and writes 6 PNG files to report/img/ (needs Edge; stop npm start first)
-npm run report       # report/report.src.html + report/img/ -> report/report.html
-npm run report:pdf   # same, plus report/SkyLink_Assignment4.pdf
-```
-
-`mobile.png` is taken from `/phone.html?static=1` (the UI in a 390 x 844 frame), because headless Edge windows cannot be narrower than about 500 px. The Wireshark screenshots in `report/img/` were taken in Wireshark with a dedicated profile (`tools/wireshark/report-profile`) and the dissector loaded with `-X lua_script`. `report/report.src.html` still has `TODO (Paul)` placeholders for the text.
 
 ## Tests
 
