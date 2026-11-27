@@ -1,7 +1,6 @@
 # Dependencies
 node_modules/
 
-# Demo: runs, captures, script and its test
 data/
 captures/
 scripts/demo.js
