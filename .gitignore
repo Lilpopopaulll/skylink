@@ -6,14 +6,13 @@ data/
 captures/
 scripts/demo.js
 test/demo.test.js
+tools/
 
-# Report: sources, images, generated HTML/PDF, builder and its test
 report/
 *.pdf
 scripts/build-report.js
 test/report.test.js
 
-# Screenshots: capture script, phone frame, Wireshark profile, images
 scripts/shots.js
 public/phone.html
 tools/wireshark/report-profile/
