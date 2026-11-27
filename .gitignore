@@ -6,7 +6,7 @@ data/
 captures/
 scripts/demo.js
 test/demo.test.js
-tools/
+tools/wireshark
 
 report/
 *.pdf
