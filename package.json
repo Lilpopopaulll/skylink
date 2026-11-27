@@ -1,0 +1,21 @@
+{
+  "name": "skylink",
+  "version": "1.0.0",
+  "description": "SkyLink: drone-fleet control center over TCP (SLCP) and UDP (SLTP), zero dependencies",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server/cli.js",
+    "fleet": "node src/sim/fleet.js",
+    "demo": "node scripts/demo.js",
+    "demo:hold": "node scripts/demo.js --hold",
+    "shots": "node scripts/shots.js",
+    "report": "node scripts/build-report.js",
+    "report:pdf": "node scripts/build-report.js --pdf",
+    "test": "node --test test/*.test.js"
+  }
+}

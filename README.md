@@ -1,0 +1,111 @@
+# SkyLink
+
+SkyLink is a drone-fleet control center. A ground station talks to four simulated drones over two protocols built from scratch: **SLCP** on TCP for commands and reliable flight-log upload, and **SLTP** on UDP for 10 Hz telemetry.
+It shows what each transport is good at: commands queue during a disconnection and are delivered after reconnection, an interrupted 1 MiB upload resumes where the server's disk says it stopped, and UDP loss, reordering and jitter are measured instead of hidden.
+A live web dashboard, a Wireshark dissector and a scripted demo make all of it visible. Zero dependencies: Node's standard library only.
+
+## Assignment mapping
+
+| Requirement | Where |
+|---|---|
+| TCP backend | `src/server/tcp.js` (sessions, command outbox, resumable log upload, PING/PONG), framing in `src/protocol/slcp.js` |
+| UDP backend | `src/server/udp.js` (telemetry statistics, echo probes), datagrams in `src/protocol/sltp.js`, statistics in `src/protocol/stats.js` |
+| Client side (drones) | `src/sim/drone.js`, `src/sim/fleet.js` |
+| Protocol demonstrated in the UI | `public/` (map, per-drone TCP/UDP figures, protocol inspector, chaos buttons) served by `src/server/http.js` |
+| Protocol demonstrated in Wireshark | `tools/wireshark/skylink.lua`, `scripts/demo.js`, `captures/demo.pcapng`, `captures/demo-timeline.txt` |
+| Protocol specification | `docs/protocol.md` |
+| Agentic AI development | `docs/ai-dev-process.md` |
+
+## Requirements
+
+- Node.js 22 or newer.
+- Microsoft Edge (Windows paths are searched; set `SKY_EDGE` otherwise): only for `npm run shots` and `npm run report:pdf`.
+- Wireshark with Npcap and "Support loopback traffic" enabled: only to capture the demo.
+
+## Quick start
+
+```
+npm start          # ground station: TCP 7400, UDP 7401, UI on http://127.0.0.1:8400
+npm run fleet      # in a second terminal: 4 simulated drones (--count N up to 8, --loss PCT)
+```
+
+Open http://127.0.0.1:8400. `/?static=1` renders one snapshot without live updates.
+
+## The demo
+
+```
+npm run demo        # 60 s scripted scenario, prints a summary and RESULT: OK or RESULT: FAIL <reasons>
+npm run demo:hold   # same, then leaves the station and its UI open until Ctrl+C
+```
+
+Station and four drones run in one process but use real sockets on 127.0.0.1, so everything is visible in Wireshark. Scenario: all drones take off (T+3 s) and fly a mission (T+8 s); Delta's UDP loss is set to 15 % (T+12 s); Charlie starts uploading a 1 MiB flight log (T+16 s); at 40 % the station resets Charlie's TCP link and queues a `goto`; Charlie reconnects, the session resumes, the command is delivered, the upload resumes and its SHA-256 is verified; all drones return home (T+44 s) and land. The run folder `data/demo-YYYYMMDD-HHmmss/` holds the received log and `summary.json`. Options: `--duration N` (at least 10 s, compressed run), `--ephemeral` (free ports).
+
+Result of the run recorded in `captures/demo-timeline.txt` (the full 60 s scenario; the drones were all landed at T+88.3 s): `RESULT: OK`. Charlie's link was reset at T+18.8 s with 425,984 bytes on disk, reconnected at T+20.4 s with the session resumed and 1 queued command delivered, the upload resumed at byte 425,984, SHA-256 verified at T+24.5 s. Delta's loss measured since the order: 15.4 % (set: 15 %). See `docs/protocol.md` for why the resume point was 425,984 although the last ACK the drone had seen was 409,600.
+
+## Ports and configuration
+
+| Port | Protocol | Variable |
+|---|---|---|
+| 7400 TCP | SLCP | `SKY_TCP_PORT` |
+| 7401 UDP | SLTP | `SKY_UDP_PORT` |
+| 8400 HTTP | UI, API, SSE | `SKY_HTTP_PORT` |
+
+Other variables: `SKY_HOST` (default `127.0.0.1`; use `0.0.0.0` for a real LAN, which may trigger the Windows firewall prompt), `SKY_DATA` (folder for received logs, default `data/`), `SKY_EDGE` (path to `msedge.exe`). The code uses `127.0.0.1` rather than `localhost` on purpose, so that nothing resolves to IPv6 `::1`. A fleet on another machine: `node src/sim/fleet.js --host <station-ip>`.
+
+## Capturing with Wireshark
+
+1. Capture on the interface **"Adapter for loopback traffic capture"** (Npcap), with the capture filter `tcp port 7400 or udp port 7401`.
+2. Run `npm run demo`, stop the capture.
+3. Open it with the dissector, without installing anything:
+   `wireshark -X lua_script:tools/wireshark/skylink.lua -r captures/demo.pcapng`
+   (or copy `skylink.lua` to `%APPDATA%\Wireshark\plugins\`).
+
+Display filters: `slcp`, `slcp.type == 0x10` (COMMAND), `slcp.type == 0x21` (LOG_CHUNK), `slcp.type == 0x22` (LOG_ACK), `tcp.port == 7400 && tcp.flags.reset == 1` (the voluntary RST), `sltp`, `sltp.drone == 4`, `sltp.type == 2 || sltp.type == 3` (echo).
+## HTTP API
+
+| Route | Description |
+|---|---|
+| `GET /api/state` | Full JSON snapshot: ports, totals, drones (TCP/UDP figures, telemetry, trail, history, log), protocol inspector, events |
+| `GET /events` | Server-sent events: one `state` event (full snapshot) every 250 ms |
+| `POST /api/command` | `{"droneId":1,"action":"takeoff","params":{}}` returns 202 `{cmdId, status}` with `status` `sent` or `queued`. Actions: `takeoff`, `goto`, `mission`, `rth`, `land`, `set_udp_loss` |
+| `POST /api/chaos` | `{"droneId":1,"kind":"udp_loss","pct":15}` or `{"droneId":1,"kind":"cut_tcp"}` returns `{ok}` |
+
+Errors: 400 for bad JSON, action or parameters, 404 for an unknown drone, 413 above 4096 bytes. Static files come from `public/`.
+
+## Screenshots and report
+
+```
+npm run shots        # plays the demo and writes 6 PNG files to report/img/ (needs Edge; stop npm start first)
+npm run report       # report/report.src.html + report/img/ -> report/report.html
+npm run report:pdf   # same, plus report/SkyLink_Assignment4.pdf
+```
+
+`mobile.png` is taken from `/phone.html?static=1` (the UI in a 390 x 844 frame), because headless Edge windows cannot be narrower than about 500 px. The Wireshark screenshots in `report/img/` were taken in Wireshark with a dedicated profile (`tools/wireshark/report-profile`) and the dissector loaded with `-X lua_script`. `report/report.src.html` still has `TODO (Paul)` placeholders for the text.
+
+## Tests
+
+```
+npm test    # node --test test/*.test.js
+```
+
+82 tests, all passing at the time of writing: codecs, statistics, the TCP server (framing errors, session resume, command queue, resumable upload, SHA-256 mismatch), UDP statistics, HTTP API, drone physics and behaviour, UI file checks, report builder, and a compressed demo run.
+
+## Layout
+
+```
+src/config.js            constants and environment variables
+src/protocol/            slcp.js, sltp.js, stats.js
+src/server/              tcp.js, udp.js, http.js, state.js, bus.js, missions.js, index.js, cli.js
+src/sim/                 drone.js, fleet.js, physics.js, flightlog.js, rng.js
+public/                  index.html, app.js, map.js, charts.js, style.css, phone.html
+tools/wireshark/         skylink.lua (dissectors for SLCP and SLTP)
+scripts/                 demo.js, shots.js, build-report.js
+report/                  report.src.html, img/
+docs/                    protocol.md, ai-dev-process.md
+captures/                demo.pcapng, demo-timeline.txt
+test/                    *.test.js, helpers/net.js
+```
+
+## License
+
+MIT, see `LICENSE`.

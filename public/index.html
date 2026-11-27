@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SkyLink Ground Station</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <h1>SkyLink <span>Ground Station</span></h1>
+      <span id="live" class="pill">connecting</span>
+    </div>
+    <div class="top-stats">
+      <div class="stat"><span class="k">Uptime</span><span class="v mono" id="uptime">--</span></div>
+      <div class="stat"><span class="k">Ports</span><span class="v mono" id="ports">--</span></div>
+      <div class="stat"><span class="k">TCP frames</span><span class="v mono" id="t-tcp">--</span></div>
+      <div class="stat"><span class="k">UDP datagrams</span><span class="v mono" id="t-udp">--</span></div>
+      <div class="stat"><span class="k">UDP lost</span><span class="v mono" id="t-lost">--</span></div>
+      <div class="stat"><span class="k">UDP dropped</span><span class="v mono" id="t-drop">--</span></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="panel map-panel">
+      <div class="panel-head">
+        <h2>Airspace</h2>
+        <span class="sub" id="map-sub">1000 &times; 1000 m &middot; grid 100 m</span>
+      </div>
+      <canvas id="map" width="600" height="600"></canvas>
+      <div id="fleet-actions">
+        <span class="label">All drones</span>
+        <button type="button" data-fleet="takeoff">All: Take off</button>
+        <button type="button" data-fleet="mission">All: Mission</button>
+        <button type="button" data-fleet="rth">All: Return home</button>
+        <button type="button" data-fleet="land">All: Land</button>
+      </div>
+    </section>
+    <section id="cards" aria-label="Drones"></section>
+  </main>
+
+  <div class="lower">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Protocol inspector</h2>
+        <span class="sub">latest frames &middot; newest first</span>
+      </div>
+      <div class="scroll">
+        <table id="inspector">
+          <thead>
+            <tr>
+              <th>Time</th><th>Proto</th><th class="hide-sm">Dir</th><th>Drone</th><th>Type</th><th class="hide-sm num">Size</th><th>Info</th>
+            </tr>
+          </thead>
+          <tbody id="inspector-body"></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Events</h2>
+        <span class="sub">newest first</span>
+      </div>
+      <ul id="events" class="scroll"></ul>
+    </section>
+  </div>
+</div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

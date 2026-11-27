@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Demo: runs, captures, script and its test
+data/
+captures/
+scripts/demo.js
+test/demo.test.js
+
+# Report: sources, images, generated HTML/PDF, builder and its test
+report/
+*.pdf
+scripts/build-report.js
+test/report.test.js
+
+# Screenshots: capture script, phone frame, Wireshark profile, images
+scripts/shots.js
+public/phone.html
+tools/wireshark/report-profile/
+*.png
+*.jpg
+*.jpeg
+
+# AI generation: agent instructions, settings, process notes
+CLAUDE.md
+**/CLAUDE.md
+.claude/
+AGENTS.md
+GEMINI.md
+.cursor/
+.cursorrules
+.github/copilot-instructions.md
+.aider*
+docs/ai-dev-process.md
+
+# Packaged deliverables
+*.zip
