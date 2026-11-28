@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes, createHash } from 'node:crypto';
 import { T, jsonFrame, encodeLogChunk } from '../src/protocol/slcp.js';
-import { tmpDir, rmDir, waitFor, waitEvent, lastEventId, rawClient, startTestServer, within } from './helpers/net.js';
+import { tmpDir, rmDir, waitFor, waitEvent, lastEventId, rawClient, startTestServer, within, sleep } from './helpers/net.js';
 
 /** Starts a station in a temp dir, runs fn(srv, dir), always cleans up. */
 async function withServer(overrides, fn) {
@@ -222,6 +222,75 @@ test('PING arrives, PONG sets tcp.rttMs', () =>
     c.send(jsonFrame(T.PONG, JSON.parse(ping.body.toString('utf8'))));
     await waitFor(() => droneSnap(srv, 3).tcp.rttMs !== null, { what: 'tcp.rttMs' });
     assert.ok(droneSnap(srv, 3).tcp.rttMs >= 0);
+  }));
+
+test('ALERT critical -> COMMAND land, then ALERT_ACK with its cmdId; incident in the snapshot', () =>
+  withServer({}, async (srv, dir, connect) => {
+    const { c } = await connect(3);
+    const since = lastEventId(srv.bus);
+    c.json(T.ALERT, { alertId: 1, kind: 'motor_failure', severity: 'critical', ageMs: 0, x: 1, y: 2, alt: 40, battery: 80 });
+    const cmd = await c.nextJson(T.COMMAND);
+    assert.equal(cmd.action, 'land');
+    const ack = await c.nextJson(T.ALERT_ACK);
+    assert.deepEqual(ack, { alertId: 1, action: 'land', cmdId: cmd.cmdId });
+    const posCmd = c.frames.findIndex((f) => f.type === T.COMMAND);
+    const posAck = c.frames.findIndex((f) => f.type === T.ALERT_ACK);
+    assert.ok(posCmd >= 0 && posAck > posCmd, 'COMMAND must be received before ALERT_ACK');
+    const inc = srv.state.snapshot().incidents[0];
+    assert.equal(inc.kind, 'motor_failure');
+    assert.equal(inc.severity, 'critical');
+    assert.equal(inc.action, 'land');
+    assert.equal(inc.drone, 'Charlie');
+    assert.equal(droneSnap(srv, 3).incident.severity, 'critical');
+    const ev = await waitEvent(srv.bus, 'incident', { sinceId: since });
+    assert.equal(ev.alertId, 1);
+  }));
+
+test('ALERT motor_failure sent with severity info -> the station table wins, land is ordered', () =>
+  withServer({}, async (srv, dir, connect) => {
+    const { c } = await connect(3);
+    c.json(T.ALERT, { alertId: 1, kind: 'motor_failure', severity: 'info', ageMs: 0 });
+    const cmd = await c.nextJson(T.COMMAND);
+    assert.equal(cmd.action, 'land');
+    const ack = await c.nextJson(T.ALERT_ACK);
+    assert.equal(ack.action, 'land');
+    assert.equal(srv.state.snapshot().incidents[0].severity, 'critical');
+  }));
+
+test('ALERT info -> ALERT_ACK action null, no command, incident logged', () =>
+  withServer({}, async (srv, dir, connect) => {
+    const { c } = await connect(3);
+    c.json(T.ALERT, { alertId: 1, kind: 'gps_degraded', severity: 'info', ageMs: 0 });
+    const ack = await c.nextJson(T.ALERT_ACK);
+    assert.equal(ack.action, null);
+    assert.equal(ack.cmdId, null);
+    await sleep(200);
+    assert.equal(c.frames.some((f) => f.type === T.COMMAND), false);
+    assert.equal(srv.state.snapshot().incidents.length, 1);
+  }));
+
+test('a duplicated alertId is acknowledged again but the failsafe runs once', () =>
+  withServer({}, async (srv, dir, connect) => {
+    const { c } = await connect(3);
+    const alert = { alertId: 1, kind: 'battery_low', severity: 'warning', ageMs: 0, x: 1, y: 2, alt: 40, battery: 29 };
+    c.json(T.ALERT, alert);
+    const ack1 = await c.nextJson(T.ALERT_ACK);
+    c.json(T.ALERT, alert);
+    const ack2 = await c.nextJson(T.ALERT_ACK);
+    assert.deepEqual(ack2, ack1);
+    await sleep(200);
+    const commands = c.frames.filter((f) => f.type === T.COMMAND);
+    assert.equal(commands.length, 1);
+    assert.equal(JSON.parse(commands[0].body.toString('utf8')).action, 'rth');
+    assert.equal(srv.state.snapshot().incidents.length, 1);
+  }));
+
+test('invalid ALERT -> ERROR BAD_JSON', () =>
+  withServer({}, async (srv, dir, connect) => {
+    const { c } = await connect(3);
+    c.json(T.ALERT, { alertId: 1, kind: 'toString', severity: 'info' });
+    assert.equal((await c.nextJson(T.ERROR)).code, 'BAD_JSON');
+    await within(c.closed, 2000, 'server to close the socket');
   }));
 
 test('a silent connection is destroyed after idleMs', () =>

@@ -22,9 +22,9 @@ test('no external resource in public/ (only the SVG namespace is tolerated)', ()
   }
 });
 
-test('index.html declares the six zones and loads the module', () => {
+test('index.html declares the seven zones and loads the module', () => {
   const html = read('index.html');
-  for (const id of ['topbar', 'map', 'cards', 'fleet-actions', 'inspector', 'events']) {
+  for (const id of ['topbar', 'map', 'cards', 'fleet-actions', 'inspector', 'events', 'incidents']) {
     assert.match(html, new RegExp(`id="${id}"`), `#${id} missing`);
   }
   assert.match(html, /<script type="module" src="\/app\.js">/);

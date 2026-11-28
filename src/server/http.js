@@ -164,7 +164,15 @@ export function startHttp({ config, state, tcp, publicDir }) {
       }
     }
     if (data.kind === 'cut_tcp') return sendJson(res, 200, { ok: tcp.cutTcp(data.droneId) });
-    return sendJson(res, 400, { error: 'kind must be udp_loss or cut_tcp' });
+    if (data.kind === 'fault') {
+      try {
+        const { cmdId, status } = tcp.sendCommand(data.droneId, 'inject_fault', { fault: data.fault });
+        return sendJson(res, 200, { ok: true, cmdId, status });
+      } catch (err) {
+        return answerError(res, err);
+      }
+    }
+    return sendJson(res, 400, { error: 'kind must be udp_loss, cut_tcp or fault' });
   }
 
   async function handle(req, res) {

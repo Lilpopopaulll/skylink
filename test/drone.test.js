@@ -195,6 +195,56 @@ test('a command delivered twice (same cmdId) is acknowledged twice but executed 
   }
 });
 
+test('an alert raised while TCP is down is queued and delivered after the session resumes', { timeout: 30000 }, async () => {
+  await withStation(async (ctx) => {
+    const { server } = ctx;
+    const d = ctx.drone(1, { timeScale: 5 });
+    d.start();
+    await connectedOnServer(ctx, 1);
+    const t0 = lastEventId(server.bus);
+    const takeoff = server.sendCommand(1, 'takeoff', { alt: 40 });
+    await waitEvent(server.bus, 'command:ack', { sinceId: t0, pred: (e) => e.cmdId === takeoff.cmdId && e.status === 'done', timeoutMs: 15000 });
+
+    const cutId = lastEventId(server.bus);
+    const disconnected = new Promise((res) => d.once('disconnected', res)); // before the cut
+    assert.equal(server.cutTcp(1), true);
+    await within(disconnected, 3000, 'drone to see the reset');
+    const id = d.injectFault('battery_low');
+    assert.equal(d.pendingAlerts, 1);
+    assert.equal(d.stats.alertsDeferred, 1);
+
+    const hello = await waitEvent(server.bus, 'drone:hello', { sinceId: cutId, pred: (e) => e.resumed === true, timeoutMs: 10000 });
+    const ev = await waitEvent(server.bus, 'incident', { sinceId: cutId, timeoutMs: 10000 });
+    assert.equal(ev.alertId, id);
+    assert.equal(ev.action, 'rth');
+    assert.ok(ev.ageMs >= 150, `ageMs ${ev.ageMs}`);
+    assert.ok(ev.id > hello.id);
+    await waitFor(() => d.pendingAlerts === 0, { what: 'ALERT_ACK on the drone' });
+    await waitEvent(server.bus, 'command:ack', { sinceId: cutId, pred: (e) => e.cmdId === ev.cmdId && e.status === 'accepted', timeoutMs: 10000 });
+    assert.ok([5, 6, 0].includes(d.state.state), `state ${d.state.state}`);
+  });
+});
+
+test('inject_fault: the drone raises the alert and the station lands it', { timeout: 30000 }, async () => {
+  await withStation(async (ctx) => {
+    const { server } = ctx;
+    const d = ctx.drone(1, { timeScale: 5 });
+    d.start();
+    await connectedOnServer(ctx, 1);
+    const t0 = lastEventId(server.bus);
+    const takeoff = server.sendCommand(1, 'takeoff', { alt: 40 });
+    await waitEvent(server.bus, 'command:ack', { sinceId: t0, pred: (e) => e.cmdId === takeoff.cmdId && e.status === 'done', timeoutMs: 15000 });
+
+    const since = lastEventId(server.bus);
+    server.sendCommand(1, 'inject_fault', { fault: 'motor_failure' });
+    const ev = await waitEvent(server.bus, 'incident', { sinceId: since, pred: (e) => e.kind === 'motor_failure', timeoutMs: 10000 });
+    assert.equal(ev.action, 'land');
+    await waitEvent(server.bus, 'command:ack', { sinceId: since, pred: (e) => e.cmdId === ev.cmdId && e.status === 'done', timeoutMs: 10000 });
+    assert.equal(d.state.state, 0); // LANDED
+    assert.ok(server.bus.recent().some((e) => e.type === 'chaos:fault' && e.id > since && e.fault === 'motor_failure'));
+  });
+});
+
 test('drone survives a refused connection and keeps retrying', { timeout: 15000 }, async () => {
   // Grab a free port, then close it so nothing listens there.
   const probe = net.createServer();

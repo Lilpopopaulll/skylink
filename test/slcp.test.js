@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   T, TYPE_NAMES, ProtocolError, FrameDecoder, encodeFrame, jsonFrame, parseJson,
-  encodeLogChunk, decodeLogChunk, describeFrame,
+  encodeLogChunk, decodeLogChunk, describeFrame, ALERT_KINDS, SEVERITIES,
 } from '../src/protocol/slcp.js';
 
 test('encodeFrame/FrameDecoder roundtrip', () => {
@@ -110,4 +110,15 @@ test('describeFrame', () => {
   const chunk = encodeLogChunk(32768, Buffer.alloc(16384)).subarray(5);
   assert.equal(describeFrame(T.LOG_CHUNK, chunk).info, 'off=32768 len=16384');
   assert.equal(describeFrame(T.PING, Buffer.from('nope')).info, '(undecodable)');
+});
+
+test('ALERT / ALERT_ACK: codes, kinds table, describeFrame', () => {
+  const body = (o) => Buffer.from(JSON.stringify(o));
+  assert.equal(T.ALERT, 0x40);
+  assert.equal(TYPE_NAMES[0x41], 'ALERT_ACK');
+  assert.equal(Object.keys(ALERT_KINDS).length, 5);
+  for (const sev of Object.values(ALERT_KINDS)) assert.ok(SEVERITIES.includes(sev));
+  assert.equal(describeFrame(T.ALERT, body({ alertId: 2, kind: 'motor_failure', severity: 'critical' })).info, 'motor_failure critical #2');
+  assert.equal(describeFrame(T.ALERT_ACK, body({ alertId: 2, action: 'land', cmdId: 14 })).info, '#2 land cmd #14');
+  assert.equal(describeFrame(T.ALERT_ACK, body({ alertId: 1, action: null, cmdId: null })).info, '#1 logged');
 });

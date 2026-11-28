@@ -39,6 +39,8 @@ Bodies are compact JSON (`JSON.stringify`, no spaces, at most 4096 bytes), excep
 | 0x23 | LOG_DONE | station -> drone | `{"logId":"flight-003","size":1048576,"sha256":"<hex>","ok":true}` |
 | 0x30 | PING | station -> drone | `{"n":12,"t":123456.789}` (`t` = station `performance.now()` in ms) |
 | 0x31 | PONG | drone -> station | exact copy of the PING body |
+| 0x40 | ALERT | drone -> station | `{"alertId":1,"kind":"motor_failure","severity":"critical","ageMs":0,"x":312.4,"y":850,"alt":40,"battery":87}` (x, y, alt rounded to 0.1 m, battery an integer) |
+| 0x41 | ALERT_ACK | station -> drone | `{"alertId":1,"action":"land","cmdId":14}`; for an `info` alert `{"alertId":1,"action":null,"cmdId":null}` |
 | 0x7F | ERROR | station -> drone | `{"code":"FRAME_TOO_BIG","message":"..."}`, then the station closes the connection (`socket.end()`) |
 
 LOG_CHUNK body layout:
@@ -58,6 +60,7 @@ byte 4..    data, 1..16384 bytes
 | `rth` | `{}` | return to the base, then land there |
 | `land` | `{}` | land where the drone is |
 | `set_udp_loss` | `{pct}` 0..100 | chaos knob: the drone drops that share of its own UDP datagrams (telemetry and echo replies) |
+| `inject_fault` | `{fault}` | chaos knob: the drone raises that incident as if it had detected it (`fault` is a key of `ALERT_KINDS`, see below; an unknown key is rejected with `BAD_PARAMS` on the station and `bad fault` on the drone). `battery_low` and `battery_critical` also lower the battery to 30 % / 10 % |
 
 `cmdId` is a station-wide increasing integer. `accepted` means "received and understood"; `done` is sent when the physical action ends (takeoff reached altitude, goto arrived, mission finished, landed).
 
@@ -93,6 +96,62 @@ Drone                                   Station
 - If the drone is disconnected, `sendCommand` returns `status: "queued"` and nothing is written. After the next HELLO/WELCOME, the station writes the whole outbox again, in `cmdId` order. The `queued` field of WELCOME is the size of the outbox.
 - This is **at-least-once** delivery: after a cut, a command whose ACK was lost is sent again. The drone therefore remembers the result of every `cmdId` it has handled (in memory, for the life of the process). A duplicate gets the stored ACK again and is **not executed twice**. At-least-once plus deduplication gives the effect of exactly-once.
 - Limit, by design: the `done` ACK is sent once. If the link is down at that moment it is lost and not retransmitted; the outbox is already empty because `accepted` was acknowledged earlier.
+
+### Incident alerts and automatic failsafe
+
+A drone that detects a problem tells the station with an `ALERT` over TCP, not in the UDP telemetry: Delta loses 15 % of its datagrams in the demo, and an alert in a lost datagram would vanish without a trace. The mechanism is the command outbox in the opposite direction.
+
+Drone side:
+
+- Every alert gets an `alertId` (1, 2, 3... per drone process) and is kept in the drone's `_alerts` map **until an `ALERT_ACK` for that id arrives**. It is written at once if the link is up; if not, it simply waits.
+- After every WELCOME the drone sends the whole map again, in id order, before it restarts the log upload. Delivery is **at-least-once**.
+- `ageMs` is the time the alert spent on the drone between its detection and **this** transmission. It is recomputed at each (re)send from one clock (the drone's), so a late delivery is measurable: it is about 0 on the first attempt and several seconds after a cut.
+- The drone sends the severity from a table shared with the station:
+
+| kind | severity | raised when |
+|---|---|---|
+| `battery_low` | warning | battery <= 30 % |
+| `battery_critical` | critical | battery <= 10 % (supersedes `battery_low`) |
+| `motor_failure` | critical | injected only (`inject_fault`) |
+| `geofence_breach` | warning | airborne and outside the `area` (0..1000 m on both axes by default) |
+| `gps_degraded` | info | injected only (`inject_fault`) |
+
+A kind is raised once per flight (a takeoff clears the memory) unless it is injected again.
+
+Station side:
+
+- The station validates the alert (`alertId` an integer >= 1, `kind` a key of the table, `severity` one of `info`, `warning`, `critical`). Otherwise: `ERROR BAD_JSON` and the connection is closed.
+- The severity applied is the one of the station's table for that `kind`; if the drone sends a different one, it is ignored (no error). The station chooses the action from that severity only (`FAILSAFE`):
+
+| severity | action |
+|---|---|
+| `info` | none, the incident is only logged |
+| `warning` | `rth` |
+| `critical` | `land` |
+
+- Order of the frames at the station: rx `ALERT`, tx `COMMAND <action>` (if any), tx `ALERT_ACK`, which carries the `cmdId` of that command. The incident then shows in the UI with the status of the command (`sent` or `queued`, later `accepted` / `done`).
+- Deduplication: for each drone the station remembers `alertId -> {action, cmdId}`. A duplicate gets the **same** `ALERT_ACK` and the failsafe is not applied twice. The memory is cleared when a HELLO arrives **without** `sessionId` (a new drone process, whose ids restart at 1); a HELLO with a stale `sessionId` keeps it (same process, ids keep growing).
+- No escalation logic is needed: `rth` on a drone that is already landing does nothing, and `land` after `rth` lands it where it is, so `critical` wins.
+- Limit: a failsafe decided on the ground is late when the link is cut. The drone keeps its own onboard rule (it returns home alone at 20 % battery); the station is a second layer.
+
+Sequence for an alert raised while the link is down (Charlie in `npm run demo`, `gps_degraded`, info):
+
+```
+Drone                          Station
+  X── TCP reset ──────────────X
+detects gps_degraded: alert #1 stays in _alerts (ageMs grows)
+… back-off, new TCP handshake …
+HELLO{sessionId:s1} ─────────▶
+               ◀────────────── WELCOME{resumed:true,queued:1}
+               ◀────────────── COMMAND #10 goto   (outbox, written right after WELCOME in the same onHello)
+ALERT{alertId:1,gps_degraded,info,ageMs:several seconds} ▶   (sent on WELCOME, before LOG_BEGIN)
+COMMAND_ACK #10 accepted ────▶
+               ◀────────────── ALERT_ACK{alertId:1,action:null,cmdId:null}
+```
+
+The station writes WELCOME and then the queued commands in the same `onHello`, so the queued `goto` comes right after the WELCOME, before the ALERT sent back by the drone.
+
+For a `warning` or `critical` alert, a `COMMAND rth` / `COMMAND land` is written just before the `ALERT_ACK`.
 
 ### Resumable log upload
 

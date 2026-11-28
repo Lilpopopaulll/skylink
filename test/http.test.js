@@ -129,6 +129,28 @@ test('POST /api/chaos: cut_tcp -> 200 + tcp:cut; udp_loss -> chaos:udp_loss; bad
     await within(c.closed, 2000, 'client to see the reset');
   }));
 
+test('POST /api/chaos fault -> 200 + COMMAND inject_fault; unknown fault -> 400; state has incidents', () =>
+  withServer({}, async (srv, hello) => {
+    const c = await hello(1, 'Alpha');
+    const port = srv.ports.http;
+    const s = (await request(port, { path: '/api/state' })).json();
+    assert.ok(Array.isArray(s.incidents));
+    assert.equal(s.drones[0].incident, null);
+
+    const res = await postJson(port, '/api/chaos', { droneId: 1, kind: 'fault', fault: 'motor_failure' });
+    assert.equal(res.status, 200);
+    const body = res.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.status, 'sent');
+    const cmd = await c.nextJson(T.COMMAND);
+    assert.equal(cmd.action, 'inject_fault');
+    assert.equal(cmd.params.fault, 'motor_failure');
+    assert.equal(cmd.cmdId, body.cmdId);
+
+    assert.equal((await postJson(port, '/api/chaos', { droneId: 1, kind: 'fault', fault: 'meteor' })).status, 400);
+    assert.equal((await postJson(port, '/api/chaos', { droneId: 9, kind: 'fault', fault: 'motor_failure' })).status, 404);
+  }));
+
 test('path traversal and non-static files -> 404', () =>
   withServer({}, async (srv) => {
     const port = srv.ports.http;

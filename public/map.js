@@ -202,6 +202,14 @@ export function drawMap(canvas, snap) {
       ctx.fill();
     }
 
+    if (d.incident) {
+      ctx.strokeStyle = { info: '#3ad1ff', warning: '#fbbf24', critical: BAD }[d.incident.severity] || BAD;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, 13, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(((known ? num(t.heading) ?? 0 : 0) * Math.PI) / 180);

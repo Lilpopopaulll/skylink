@@ -14,6 +14,7 @@
 --   slcp.type == 0x10                            COMMAND only
 --   slcp.type == 0x21                            LOG_CHUNK only (slcp.offset shows the position in the log)
 --   slcp.type == 0x22                            LOG_ACK only (offset = bytes written to disk)
+--   slcp.type == 0x40 || slcp.type == 0x41       incident alerts and their acknowledgements
 --   tcp.port == 7400 && tcp.flags.reset == 1     the voluntary RST of the demo
 --   sltp.drone == 4                              telemetry and echoes of Delta
 --   sltp.type == 2 || sltp.type == 3             UDP echo request / reply (RTT probes)
@@ -34,6 +35,8 @@ local SLCP_TYPES = {
   [0x23] = "LOG_DONE",
   [0x30] = "PING",
   [0x31] = "PONG",
+  [0x40] = "ALERT",
+  [0x41] = "ALERT_ACK",
   [0x7F] = "ERROR",
 }
 
@@ -131,6 +134,14 @@ local function dissect_pdu(tvb, pinfo, tree)
       info = "LOG_DONE ok=" .. (text:match('"ok":(%a+)') or "?")
     elseif ty == 0x30 or ty == 0x31 then
       info = name .. " n=" .. (text:match('"n":(%d+)') or "?")
+    elseif ty == 0x40 then
+      info = string.format("ALERT #%s %s %s age=%sms",
+        text:match('"alertId":(%d+)') or "?", text:match('"kind":"([%w_]+)"') or "?",
+        text:match('"severity":"(%a+)"') or "?", text:match('"ageMs":(%d+)') or "?")
+    elseif ty == 0x41 then
+      -- action is a string (rth, land) or null
+      info = string.format("ALERT_ACK #%s action=%s",
+        text:match('"alertId":(%d+)') or "?", text:match('"action":"?(%a+)') or "?")
     elseif ty == 0x7F then
       info = "ERROR " .. (text:match('"code":"([%w_]+)"') or "?")
     end

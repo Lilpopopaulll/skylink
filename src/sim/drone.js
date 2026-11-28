@@ -5,7 +5,7 @@ import dgram from 'node:dgram';
 import { EventEmitter } from 'node:events';
 import { CONFIG, CALLSIGNS, homeFor } from '../config.js';
 import {
-  T, FrameDecoder, encodeFrame, jsonFrame, parseJson, encodeLogChunk,
+  T, FrameDecoder, encodeFrame, jsonFrame, parseJson, encodeLogChunk, ALERT_KINDS,
 } from '../protocol/slcp.js';
 import { DT, decodeDatagram, encodeTelemetry, encodeEcho } from '../protocol/sltp.js';
 import { mulberry32 } from './rng.js';
@@ -13,8 +13,10 @@ import { sha256 } from './flightlog.js';
 import {
   S, makeState, cloneState, stepDrone, beginTakeoff, beginGoto, beginMission, beginRth, beginLand,
 } from './physics.js';
+import { detectIncidents, BATTERY_LOW_PCT, BATTERY_CRITICAL_PCT } from './incidents.js';
 
 const MIN_TAKEOFF_BATTERY = 10;
+const r1 = (v) => Math.round(v * 10) / 10;
 const MAX_REAL_DT = 0.25; // seconds: a stalled event loop must not teleport the drone
 
 export class Drone extends EventEmitter {
@@ -26,7 +28,7 @@ export class Drone extends EventEmitter {
   constructor({
     droneId, name = CALLSIGNS[droneId - 1] ?? `Drone${droneId}`, model = 'SL-Quad', host = CONFIG.host,
     tcpPort = CONFIG.tcpPort, udpPort = CONFIG.udpPort, rateHz = 10, udpLossPct = 0, seed = droneId,
-    backoffMs = CONFIG.backoffMs, logChunkIntervalMs = 100, timeScale = 1,
+    backoffMs = CONFIG.backoffMs, logChunkIntervalMs = 100, timeScale = 1, area = CONFIG.area,
   }) {
     super();
     this.droneId = droneId;
@@ -64,8 +66,18 @@ export class Drone extends EventEmitter {
     this._upload = null;
     this._pump = null;
 
-    this._stats = { reconnects: 0, telemetrySent: 0, telemetrySkipped: 0, executed: 0 };
+    this.area = area;
+    this._alerts = new Map(); // alertId -> alert, kept until the station's ALERT_ACK (at-least-once)
+    this._nextAlertId = 1;
+    this._raised = new Set(); // kinds already reported since the last takeoff
+
+    this._stats = {
+      reconnects: 0, telemetrySent: 0, telemetrySkipped: 0, executed: 0, alertsRaised: 0, alertsDeferred: 0,
+    };
   }
+
+  /** Alerts raised but not yet acknowledged by the station. */
+  get pendingAlerts() { return this._alerts.size; }
 
   get connected() { return this._connected; }
 
@@ -161,6 +173,7 @@ export class Drone extends EventEmitter {
     const { s, events } = stepDrone(this._phys, dtReal * this.timeScale);
     this._phys = s;
     for (const ev of events) this._onPhysicsEvent(ev);
+    for (const k of detectIncidents(s, this.area, this._raised)) this._raise(k);
 
     // The server ignores telemetry from a drone it never saw in a HELLO, so wait for the first WELCOME.
     // After that telemetry keeps flowing even while TCP is down.
@@ -244,6 +257,56 @@ export class Drone extends EventEmitter {
     return this._write(this._sock, jsonFrame(type, obj));
   }
 
+  // ---- incidents (ALERT / ALERT_ACK) -------------------------------------------------------------
+
+  /** Simulates a fault (chaos): forces the physical cause when there is one, then raises the alert. Returns the alertId. */
+  injectFault(kind) {
+    if (typeof kind !== 'string' || !Object.hasOwn(ALERT_KINDS, kind)) throw new RangeError(`Unknown fault: ${kind}`);
+    if (kind === 'battery_low') this._phys.battery = Math.min(this._phys.battery, BATTERY_LOW_PCT);
+    if (kind === 'battery_critical') this._phys.battery = Math.min(this._phys.battery, BATTERY_CRITICAL_PCT);
+    return this._raise(kind);
+  }
+
+  /** Queues an alert (kept until acknowledged) and sends it if the link is up. */
+  _raise(kind) {
+    const s = this._phys;
+    const a = {
+      alertId: this._nextAlertId++,
+      kind,
+      severity: ALERT_KINDS[kind],
+      detectedAt: performance.now(),
+      x: r1(s.x), y: r1(s.y), alt: r1(s.alt), battery: Math.round(s.battery),
+    };
+    this._raised.add(kind);
+    if (kind === 'battery_critical') this._raised.add('battery_low');
+    this._alerts.set(a.alertId, a);
+    this._stats.alertsRaised++;
+    if (!this._connected) this._stats.alertsDeferred++;
+    this.emit('alert', { alertId: a.alertId, kind, severity: a.severity, queued: !this._connected });
+    this._sendAlert(a);
+    return a.alertId;
+  }
+
+  /** ageMs is recomputed at every (re)send, on the drone's own clock only. */
+  _sendAlert(a) {
+    this._send(T.ALERT, {
+      alertId: a.alertId,
+      kind: a.kind,
+      severity: a.severity,
+      ageMs: Math.round(performance.now() - a.detectedAt),
+      x: a.x,
+      y: a.y,
+      alt: a.alt,
+      battery: a.battery,
+    });
+  }
+
+  _onAlertAck({ alertId, action, cmdId }) {
+    if (!this._alerts.has(alertId)) return;
+    this._alerts.delete(alertId);
+    this.emit('alert:ack', { alertId, action, cmdId });
+  }
+
   _onClose(sock, reason) {
     if (sock !== this._sock) return; // an old socket closing after a newer one took over
     this._sock = null;
@@ -271,6 +334,7 @@ export class Drone extends EventEmitter {
       case T.PING:
         this._write(sock, encodeFrame(T.PONG, body)); // exact copy of the PING body
         return undefined;
+      case T.ALERT_ACK: return this._onAlertAck(parseJson(body));
       case T.LOG_ACK: return this._onLogAck(parseJson(body));
       case T.LOG_DONE: return this._onLogDone(parseJson(body));
       default: return undefined; // ERROR: the server closes right after, we reconnect from 'close'
@@ -284,6 +348,7 @@ export class Drone extends EventEmitter {
     this._welcomes++;
     if (this._welcomes > 1) this._stats.reconnects++;
     this.emit('connected', { resumed: Boolean(j.resumed) });
+    for (const a of this._alerts.values()) this._sendAlert(a); // unacknowledged alerts, in alertId order
     if (this._upload) this._beginUpload();
   }
 
@@ -307,6 +372,8 @@ export class Drone extends EventEmitter {
       this._pending = null;
       this._send(T.COMMAND_ACK, { cmdId, status: 'done' });
     }
+    // After the 'accepted' and 'done' acks: the alert (and the station's failsafe) comes next.
+    if (action === 'inject_fault') this.injectFault(p.fault);
   }
 
   /** @returns {{status:'accepted'}|{status:'rejected', reason:string}} */
@@ -320,6 +387,7 @@ export class Drone extends EventEmitter {
         if (s.state !== S.LANDED) return reject('airborne');
         beginTakeoff(s, p.alt);
         this._pending = { cmdId, kind: 'reached' };
+        this._raised.clear(); // a new flight: incidents can be reported again
         return { status: 'accepted' };
       case 'goto':
         if (grounded) return reject('not airborne');
@@ -348,6 +416,10 @@ export class Drone extends EventEmitter {
         this._pending = { cmdId, kind: 'now' };
         return { status: 'accepted' };
       }
+      case 'inject_fault':
+        if (typeof p.fault !== 'string' || !Object.hasOwn(ALERT_KINDS, p.fault)) return reject('bad fault');
+        this._pending = { cmdId, kind: 'now' };
+        return { status: 'accepted' };
       default:
         return reject('unknown action');
     }

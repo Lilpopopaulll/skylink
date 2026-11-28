@@ -15,6 +15,17 @@ const ACTIONS = [
   ['land', 'Land'],
 ];
 const LOSS_CHOICES = [0, 5, 15, 30];
+// [kind, label, short badge text]
+const FAULTS = [
+  ['battery_low', 'Battery low', 'BATT LOW'],
+  ['battery_critical', 'Battery critical', 'BATT CRIT'],
+  ['motor_failure', 'Motor failure', 'MOTOR'],
+  ['geofence_breach', 'Geofence breach', 'GEOFENCE'],
+  ['gps_degraded', 'GPS degraded', 'GPS'],
+];
+const FAULT_LABEL = Object.fromEntries(FAULTS.map(([k, l]) => [k, l]));
+const FAULT_SHORT = Object.fromEntries(FAULTS.map(([k, , s]) => [k, s]));
+const SEVERITY_CLASS = { info: 'sev-info', warning: 'sev-warning', critical: 'sev-critical' };
 const UDP_COLOR = '#a78bfa';
 const TCP_COLOR = '#3ad1ff';
 
@@ -71,6 +82,7 @@ function buildCard(d) {
       <h3>${esc(d.name)}</h3>
       <span class="model">${esc(d.model)}</span>
       <span class="badge" data-r="state">--</span>
+      <span class="badge inc" data-r="inc" hidden></span>
     </header>
     <div class="batt">
       <span class="k">Battery</span>
@@ -109,6 +121,7 @@ function buildCard(d) {
       <label><span class="k">UDP loss</span>
         <select data-r="lossSel">${LOSS_CHOICES.map((p) => `<option value="${p}">${p} %</option>`).join('')}</select>
       </label>
+      <select data-r="faultSel" aria-label="Inject fault"><option value="">Inject fault…</option>${FAULTS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>
       <button type="button" class="danger" data-chaos="cut_tcp">Cut TCP (RST)</button>
     </div>`;
   const r = {};
@@ -137,6 +150,15 @@ function updateCard(c, d) {
   }
   setText(r.state, label);
   setClass(r.state, cls);
+
+  // latest incident badge
+  if (d.incident) {
+    r.inc.hidden = false;
+    setText(r.inc, FAULT_SHORT[d.incident.kind] || String(d.incident.kind).toUpperCase());
+    setClass(r.inc, `badge inc ${SEVERITY_CLASS[d.incident.severity] || ''}`.trim());
+  } else {
+    r.inc.hidden = true;
+  }
 
   // battery
   const b = t && isNum(t.battery) ? t.battery : null;
@@ -237,6 +259,24 @@ function renderInspector(s) {
   $('inspector-body').innerHTML = rows || '<tr><td colspan="7" class="empty">No frames yet</td></tr>';
 }
 
+function renderIncidents(s) {
+  const rows = (Array.isArray(s.incidents) ? s.incidents : [])
+    .map((e) => {
+      const action = e.action ? `${e.action} #${e.cmdId} ${e.cmdStatus ?? ''}`.trim() : 'logged';
+      const late = isNum(e.ageMs) && e.ageMs >= 1000 ? ` · ${(e.ageMs / 1000).toFixed(1)} s late` : '';
+      return `<tr>
+        <td class="hide-sm mono dim">${fmtTime(e.t)}</td>
+        <td>${esc(e.drone)}</td>
+        <td>${esc(FAULT_LABEL[e.kind] || e.kind)}</td>
+        <td><span class="tag ${esc(SEVERITY_CLASS[e.severity] || '')}">${esc(e.severity)}</span></td>
+        <td class="mono">${esc(action)}</td>
+        <td class="hide-sm mono dim">${esc(`acked${late}`)}</td>
+      </tr>`;
+    })
+    .join('');
+  $('incidents-body').innerHTML = rows || '<tr><td colspan="6" class="empty">No incidents</td></tr>';
+}
+
 function renderEvents(s) {
   const list = (Array.isArray(s.events) ? s.events : []).concat(localErrors);
   list.sort((a, b) => b.t - a.t);
@@ -263,6 +303,7 @@ function render(s) {
   });
   drawMap($('map'), s);
   renderInspector(s);
+  renderIncidents(s);
   renderEvents(s);
 }
 
@@ -318,6 +359,13 @@ function wireActions() {
     const card = ev.target.closest('.card');
     if (!sel || !card) return;
     const id = Number(card.dataset.id);
+    if (sel.dataset.r === 'faultSel') {
+      if (sel.value) post('/api/chaos', { droneId: id, kind: 'fault', fault: sel.value }, `Inject ${sel.value} (drone ${id})`);
+      sel.value = '';
+      sel.blur();
+      return;
+    }
+    if (sel.dataset.r !== 'lossSel') return;
     post('/api/chaos', { droneId: id, kind: 'udp_loss', pct: Number(sel.value) }, `UDP loss ${sel.value}% (drone ${id})`);
     sel.blur();
   });

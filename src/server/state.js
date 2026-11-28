@@ -7,6 +7,7 @@ const INSPECTOR_MAX = 40;
 const EVENTS_MAX = 30;
 const TRAIL_MAX = 120;
 const HISTORY_MAX = 60;
+const INCIDENTS_MAX = 50;
 const TRAIL_EVERY = 5; // 1 telemetry in 5 goes to the trail
 const INSPECT_TELEMETRY_EVERY = 10; // 1 telemetry in 10 goes to the inspector
 
@@ -23,6 +24,7 @@ export class FleetState {
     this.totals = { tcpFrames: 0, udpDatagrams: 0, udpDropped: 0 };
     this.inspector = [];
     this.events = [];
+    this.incidents = []; // newest first
     bus.on((e) => this._onBusEvent(e));
   }
 
@@ -55,6 +57,7 @@ export class FleetState {
         mission: null,
         history: { alt: [], speed: [], battery: [], lossPct: [], tcpRtt: [], udpRtt: [] },
         log: null,
+        incident: null,
       };
       this.drones.set(droneId, rec);
     } else {
@@ -115,6 +118,16 @@ export class FleetState {
   note(level, text) {
     this.events.unshift({ t: Date.now(), level, text });
     if (this.events.length > EVENTS_MAX) this.events.length = EVENTS_MAX;
+  }
+
+  /** Records an incident reported by a drone (newest first) and marks the drone's latest incident. */
+  addIncident(entry) {
+    const e = { t: Date.now(), drone: this.nameOf(entry.droneId), ...entry };
+    this.incidents.unshift(e);
+    if (this.incidents.length > INCIDENTS_MAX) this.incidents.length = INCIDENTS_MAX;
+    const rec = this.drones.get(entry.droneId);
+    if (rec) rec.incident = { kind: e.kind, severity: e.severity, t: e.t };
+    return e;
   }
 
   /** 1 Hz: push the current values of every drone into its history. */
@@ -180,6 +193,7 @@ export class FleetState {
           mission: rec.mission ? rec.mission.map((w) => ({ ...w })) : null,
           history: Object.fromEntries(Object.entries(rec.history).map(([k, v]) => [k, [...v]])),
           log: rec.log ? { ...rec.log } : null,
+          incident: rec.incident ? { ...rec.incident } : null,
         };
       });
     return {
@@ -189,6 +203,7 @@ export class FleetState {
       area: { ...this.config.area },
       totals: { ...this.totals, udpLost },
       drones,
+      incidents: this.incidents.map((e) => ({ ...e })),
       inspector: this.inspector.map((e) => ({ ...e })),
       events: this.events.map((e) => ({ ...e })),
     };
@@ -217,6 +232,9 @@ export class FleetState {
         this.note('warn', `Command ${e.action} #${e.cmdId} queued for ${n} (link down)`);
         break;
       case 'command:ack':
+        for (const inc of this.incidents) {
+          if (inc.droneId === e.droneId && inc.cmdId === e.cmdId) inc.cmdStatus = e.status;
+        }
         if (e.status === 'done') this.note('ok', `${n} completed command #${e.cmdId}`);
         else if (e.status === 'rejected') this.note('warn', `${n} rejected command #${e.cmdId}`);
         else this.note('info', `${n} accepted command #${e.cmdId}`);
@@ -233,6 +251,16 @@ export class FleetState {
         break;
       case 'chaos:udp_loss':
         this.note('warn', `${n} simulated UDP loss set to ${e.pct}%`);
+        break;
+      case 'incident': {
+        const level = { info: 'info', warning: 'warn', critical: 'bad' }[e.severity] ?? 'info';
+        const late = e.ageMs >= 1000 ? ` (delivered ${(e.ageMs / 1000).toFixed(1)} s late)` : '';
+        const what = e.action ? `failsafe ${e.action} #${e.cmdId}` : 'logged';
+        this.note(level, `${n} ${e.severity.toUpperCase()} ${e.kind}: ${what}${late}`);
+        break;
+      }
+      case 'chaos:fault':
+        this.note('warn', `${n} fault injected: ${e.fault}`);
         break;
       case 'frame:error':
         this.note('warn', `Protocol error ${e.code}${e.droneId ? ` from ${n}` : ''}`);

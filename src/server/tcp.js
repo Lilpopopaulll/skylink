@@ -5,11 +5,13 @@ import path from 'node:path';
 import { randomBytes, createHash } from 'node:crypto';
 import { CALLSIGNS } from '../config.js';
 import {
-  T, ProtocolError, FrameDecoder, jsonFrame, parseJson, decodeLogChunk, describeFrame,
+  T, ProtocolError, FrameDecoder, jsonFrame, parseJson, decodeLogChunk, describeFrame, ALERT_KINDS, SEVERITIES,
 } from '../protocol/slcp.js';
 import { defaultMission } from './missions.js';
 
-export const ACTIONS = Object.freeze(['takeoff', 'goto', 'mission', 'rth', 'land', 'set_udp_loss']);
+export const ACTIONS = Object.freeze(['takeoff', 'goto', 'mission', 'rth', 'land', 'set_udp_loss', 'inject_fault']);
+/** Automatic failsafe the station orders for each alert severity (null = journal only). */
+export const FAILSAFE = Object.freeze({ info: null, warning: 'rth', critical: 'land' });
 const LOG_ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
 const SHA_RE = /^[0-9a-fA-F]{64}$/;
 const MAX_WAYPOINTS = 16;
@@ -43,6 +45,9 @@ function normalizeParams(droneId, action, params) {
     case 'set_udp_loss':
       if (!isNum(p.pct) || p.pct < 0 || p.pct > 100) throw new Error('BAD_PARAMS');
       return { pct: p.pct };
+    case 'inject_fault':
+      if (typeof p.fault !== 'string' || !Object.hasOwn(ALERT_KINDS, p.fault)) throw new Error('BAD_PARAMS');
+      return { fault: p.fault };
     default: // rth, land
       return {};
   }
@@ -125,6 +130,7 @@ export function startTcp({ config, state, bus }) {
       rec.udp.simLossPct = p.pct;
       bus.emit('chaos:udp_loss', { droneId, pct: p.pct });
     }
+    if (action === 'inject_fault') bus.emit('chaos:fault', { droneId, fault: p.fault });
     rec.tcp.queued = peer.outbox.size;
     const online = rec.tcp.connected && peer.conn && !peer.conn.dead;
     const status = online ? 'sent' : 'queued';
@@ -164,7 +170,7 @@ export function startTcp({ config, state, bus }) {
     const now = Date.now();
     let peer = peers.get(droneId);
     if (!peer) {
-      peer = { droneId, sessionId: null, seenAt: now, outbox: new Map(), conn: null };
+      peer = { droneId, sessionId: null, seenAt: now, outbox: new Map(), conn: null, alerts: new Map() };
       peers.set(droneId, peer);
     }
     const resumed = typeof j.sessionId === 'string' && j.sessionId === peer.sessionId
@@ -174,6 +180,8 @@ export function startTcp({ config, state, bus }) {
       // A new session restarts the drone's telemetry numbering at 1: start the UDP statistics afresh.
       state.get(droneId)?.udp?.stats?.reset();
     }
+    // A HELLO without sessionId is a new drone process: its alertIds restart at 1.
+    if (typeof j.sessionId !== 'string') peer.alerts.clear();
     peer.seenAt = now;
     if (peer.conn && peer.conn !== conn) {
       peer.conn.replaced = true;
@@ -209,6 +217,35 @@ export function startTcp({ config, state, bus }) {
     rec.tcp.queued = peer.outbox.size;
     if (rec.tcp.lastCommand && rec.tcp.lastCommand.cmdId === j.cmdId) rec.tcp.lastCommand.status = status;
     bus.emit('command:ack', { droneId: conn.droneId, cmdId: j.cmdId, status });
+  }
+
+  function onAlert(conn, body) {
+    const j = parseJson(body);
+    const peer = conn.peer;
+    const { alertId, kind } = j;
+    if (!Number.isInteger(alertId) || alertId < 1 || typeof kind !== 'string' || !Object.hasOwn(ALERT_KINDS, kind)
+      || !SEVERITIES.includes(j.severity)) {
+      throw new ProtocolError('BAD_JSON', 'ALERT needs alertId, kind and severity');
+    }
+    const severity = ALERT_KINDS[kind]; // the station's table is the source of truth; the drone's own severity is ignored
+    const known = peer.alerts.get(alertId);
+    if (known) { // duplicate (retransmission): acknowledge again, never re-apply the failsafe
+      send(conn, T.ALERT_ACK, { alertId, ...known });
+      return;
+    }
+    const droneId = conn.droneId;
+    const action = FAILSAFE[severity];
+    const r = action ? sendCommand(droneId, action, {}) : null;
+    const cmdId = r?.cmdId ?? null;
+    peer.alerts.set(alertId, { action, cmdId });
+    send(conn, T.ALERT_ACK, { alertId, action, cmdId });
+    const ageMs = Number.isInteger(j.ageMs) && j.ageMs >= 0 ? j.ageMs : 0;
+    const num = (v) => (isNum(v) ? v : null);
+    state.addIncident({
+      droneId, alertId, kind, severity, action, cmdId, cmdStatus: r?.status ?? null,
+      ageMs, x: num(j.x), y: num(j.y), alt: num(j.alt), battery: num(j.battery),
+    });
+    bus.emit('incident', { droneId, alertId, kind, severity, action, cmdId, ageMs });
   }
 
   function onPong(conn, body) {
@@ -306,6 +343,7 @@ export function startTcp({ config, state, bus }) {
       case T.LOG_BEGIN: return onLogBegin(conn, body);
       case T.LOG_CHUNK: return onLogChunk(conn, body);
       case T.PONG: return onPong(conn, body);
+      case T.ALERT: return onAlert(conn, body);
       default: throw new ProtocolError('UNKNOWN_TYPE', `Unexpected frame type 0x${type.toString(16)}`);
     }
   }

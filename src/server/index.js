@@ -45,6 +45,7 @@ export async function startServer(overrides = {}) {
     bus,
     sendCommand,
     setUdpLoss: (droneId, pct) => sendCommand(droneId, 'set_udp_loss', { pct }),
+    injectFault: (droneId, fault) => sendCommand(droneId, 'inject_fault', { fault }),
     cutTcp: (droneId) => tcp.cutTcp(droneId),
     close() {
       closing ??= (async () => {

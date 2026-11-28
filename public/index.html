@@ -25,20 +25,26 @@
   </header>
 
   <main class="main">
-    <section class="panel map-panel">
-      <div class="panel-head">
-        <h2>Airspace</h2>
-        <span class="sub" id="map-sub">1000 &times; 1000 m &middot; grid 100 m</span>
-      </div>
-      <canvas id="map" width="600" height="600"></canvas>
-      <div id="fleet-actions">
-        <span class="label">All drones</span>
-        <button type="button" data-fleet="takeoff">All: Take off</button>
-        <button type="button" data-fleet="mission">All: Mission</button>
-        <button type="button" data-fleet="rth">All: Return home</button>
-        <button type="button" data-fleet="land">All: Land</button>
-      </div>
-    </section>
+    <div class="side">
+      <section class="panel map-panel">
+        <div class="panel-head">
+          <h2>Airspace</h2>
+          <span class="sub" id="map-sub">1000 &times; 1000 m &middot; grid 100 m</span>
+        </div>
+        <canvas id="map" width="600" height="600"></canvas>
+        <div id="fleet-actions">
+          <span class="label">All drones</span>
+          <button type="button" data-fleet="takeoff">All: Take off</button>
+          <button type="button" data-fleet="mission">All: Mission</button>
+          <button type="button" data-fleet="rth">All: Return home</button>
+          <button type="button" data-fleet="land">All: Land</button>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>Incidents</h2><span class="sub">alerts over TCP &middot; newest first</span></div>
+        <div class="scroll"><table id="incidents"><thead><tr><th class="hide-sm">Time</th><th>Drone</th><th>Incident</th><th>Severity</th><th>Auto action</th><th class="hide-sm">ACK</th></tr></thead><tbody id="incidents-body"></tbody></table></div>
+      </section>
+    </div>
     <section id="cards" aria-label="Drones"></section>
   </main>
 

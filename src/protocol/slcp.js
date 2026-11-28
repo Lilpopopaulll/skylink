@@ -12,8 +12,21 @@ export const T = Object.freeze({
   LOG_DONE: 0x23,
   PING: 0x30,
   PONG: 0x31,
+  ALERT: 0x40, // drone -> station: incident report, acknowledged by ALERT_ACK
+  ALERT_ACK: 0x41, // station -> drone: carries the failsafe action taken (if any)
   ERROR: 0x7f,
 });
+
+/** Incident kinds a drone can raise, with their severity (fixed by the drone, shared by both sides). */
+export const ALERT_KINDS = Object.freeze({
+  battery_low: 'warning',
+  battery_critical: 'critical',
+  motor_failure: 'critical',
+  geofence_breach: 'warning',
+  gps_degraded: 'info',
+});
+
+export const SEVERITIES = Object.freeze(['info', 'warning', 'critical']);
 
 export const TYPE_NAMES = Object.freeze(Object.fromEntries(Object.entries(T).map(([k, v]) => [v, k])));
 
@@ -139,6 +152,8 @@ export function describeFrame(type, body) {
         case T.LOG_DONE: info = `ok=${j.ok}`; break;
         case T.PING:
         case T.PONG: info = `n=${j.n}`; break;
+        case T.ALERT: info = `${j.kind} ${j.severity} #${j.alertId}`; break;
+        case T.ALERT_ACK: info = `#${j.alertId} ${j.action ?? 'logged'}${j.cmdId ? ` cmd #${j.cmdId}` : ''}`; break;
         case T.ERROR: info = String(j.code); break;
         default: info = '';
       }

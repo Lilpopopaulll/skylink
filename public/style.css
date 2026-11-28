@@ -109,6 +109,7 @@ h1 span { color: var(--muted); font-weight: 500; }
 /* ---------- layout ---------- */
 .main, .lower { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
 .main > *, .lower > * { min-width: 0; }
+.side { display: grid; gap: 16px; align-content: start; min-width: 0; }
 @media (min-width: 1100px) {
   .main { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; }
   .lower { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); align-items: start; }
@@ -194,6 +195,11 @@ button.danger:hover:not(:disabled) { background: rgba(248, 113, 113, 0.18); bord
 .badge.st-warn { color: var(--warn); background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.35); }
 .badge.st-off { color: var(--bad); background: rgba(248, 113, 113, 0.08); border-color: rgba(248, 113, 113, 0.35); }
 .badge.st-idle { color: var(--muted); background: rgba(138, 160, 180, 0.08); }
+.badge.inc { margin-left: 0; }
+.badge[hidden] { display: none; }
+.badge.sev-info, .tag.sev-info { color: var(--cyan); background: rgba(58, 209, 255, 0.1); border: 1px solid rgba(58, 209, 255, 0.35); }
+.badge.sev-warning, .tag.sev-warning { color: var(--warn); background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.35); }
+.badge.sev-critical, .tag.sev-critical { color: var(--bad); background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.35); }
 
 .batt { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
 .batt .v { min-width: 4ch; text-align: right; font-size: 13px; }
@@ -239,7 +245,7 @@ button.danger:hover:not(:disabled) { background: rgba(248, 113, 113, 0.18); bord
 
 .actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .actions button { padding: 6px 4px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chaos { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.chaos { flex-wrap: wrap; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .chaos label { display: flex; align-items: center; gap: 8px; }
 
 /* ---------- inspector + events ---------- */
