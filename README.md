@@ -15,7 +15,6 @@ A live web dashboard, a Wireshark dissector and a scripted demo make all of it v
 | Protocol demonstrated in Wireshark | `tools/wireshark/skylink.lua`, `scripts/demo.js`, `captures/demo.pcapng`, `captures/demo-timeline.txt` |
 | Real-world feature | Incident reporting and automatic failsafe: `ALERT` / `ALERT_ACK` in `src/protocol/slcp.js`, detection in `src/sim/incidents.js` and `src/sim/drone.js`, failsafe in `src/server/tcp.js`, "Incidents" panel in `public/` |
 | Protocol specification | `docs/protocol.md` |
-| Agentic AI development | `docs/ai-dev-process.md` |
 
 ## Requirements
 
@@ -85,7 +84,7 @@ public/                  index.html, app.js, map.js, charts.js, style.css, phone
 tools/wireshark/         skylink.lua (dissectors for SLCP and SLTP)
 scripts/                 demo.js, shots.js, build-report.js
 report/                  report.src.html, img/
-docs/                    protocol.md, ai-dev-process.md
+docs/                    protocol.md
 captures/                demo.pcapng, demo-timeline.txt
 test/                    *.test.js, helpers/net.js
 ```

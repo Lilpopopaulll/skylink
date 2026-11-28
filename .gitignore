@@ -1,4 +1,4 @@
-# Dependencies
+﻿# Dependencies
 node_modules/
 
 scripts/demo.js
@@ -17,17 +17,6 @@ tools/wireshark/report-profile/
 *.jpg
 *.jpeg
 
-# AI generation: agent instructions, settings, process notes
-CLAUDE.md
-**/CLAUDE.md
-.claude/
-AGENTS.md
-GEMINI.md
-.cursor/
-.cursorrules
-.github/copilot-instructions.md
-.aider*
-docs/ai-dev-process.md
 
 # Packaged deliverables
 *.zip
