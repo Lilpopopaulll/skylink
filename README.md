@@ -1,4 +1,5 @@
 # SkyLink
+**Paul DROCHON- 26040192**
 
 SkyLink is a drone-fleet control center. A ground station talks to four simulated drones over two protocols built from scratch: **SLCP** on TCP for commands and reliable flight-log upload, and **SLTP** on UDP for 10 Hz telemetry.
 It shows what each transport is good at: commands queue during a disconnection and are delivered after reconnection, an interrupted 1 MiB upload resumes where the server's disk says it stopped, and UDP loss, reordering and jitter are measured instead of hidden. Drones also report incidents (low battery, motor failure, geofence breach...) with acknowledged, queued **ALERT** messages, and the station applies an automatic failsafe by severity (`rth` or `land`).
