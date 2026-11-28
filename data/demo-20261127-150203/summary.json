@@ -1,0 +1,288 @@
+{
+  "ok": true,
+  "reasons": [],
+  "startedAt": 1795759323867,
+  "startedAtIso": "2026-11-27T06:02:03.867Z",
+  "durationSec": 60,
+  "compression": 1,
+  "ports": {
+    "tcp": 7400,
+    "udp": 7401,
+    "http": 8400
+  },
+  "dataDir": "C:\\Projets\\SkyLink\\data\\demo-20261127-150203",
+  "charlie": {
+    "logId": "flight-003",
+    "logSize": 1048576,
+    "sha256": "2a046198b5e5ebb268edf6715599e88e64f32139770fac024001e323d29a5158",
+    "backoffMs": [
+      7000
+    ],
+    "cutAtFraction": 0.4,
+    "queuedCommand": {
+      "cmdId": 10,
+      "status": "queued"
+    },
+    "queuedCommandAcceptedAfterResume": true,
+    "uploadResult": {
+      "ok": true,
+      "sha256": "2a046198b5e5ebb268edf6715599e88e64f32139770fac024001e323d29a5158"
+    }
+  },
+  "deltaLossSinceOrderPct": 15.5,
+  "totals": {
+    "tcpFrames": 841,
+    "udpDatagrams": 3370,
+    "udpDropped": 0,
+    "udpLost": 105
+  },
+  "drones": [
+    {
+      "id": 1,
+      "name": "Alpha",
+      "finalState": "LANDED",
+      "battery": 94,
+      "udp": {
+        "received": 788,
+        "expected": 788,
+        "lossPct": 0,
+        "recentLossPct": 0,
+        "outOfOrder": 0,
+        "jitterMs": 1.04,
+        "rttMs": 1.65,
+        "simLossPct": 0
+      },
+      "tcp": {
+        "rttMs": 0.9,
+        "reconnects": 0,
+        "queued": 0,
+        "lastCommand": {
+          "cmdId": 11,
+          "action": "rth",
+          "status": "done"
+        }
+      },
+      "log": null,
+      "sim": {
+        "reconnects": 0,
+        "telemetrySent": 788,
+        "telemetrySkipped": 0,
+        "executed": 3
+      }
+    },
+    {
+      "id": 2,
+      "name": "Bravo",
+      "finalState": "LANDED",
+      "battery": 94,
+      "udp": {
+        "received": 787,
+        "expected": 787,
+        "lossPct": 0,
+        "recentLossPct": 0,
+        "outOfOrder": 0,
+        "jitterMs": 1.24,
+        "rttMs": 1.61,
+        "simLossPct": 0
+      },
+      "tcp": {
+        "rttMs": 0.78,
+        "reconnects": 0,
+        "queued": 0,
+        "lastCommand": {
+          "cmdId": 12,
+          "action": "rth",
+          "status": "done"
+        }
+      },
+      "log": null,
+      "sim": {
+        "reconnects": 0,
+        "telemetrySent": 787,
+        "telemetrySkipped": 0,
+        "executed": 3
+      }
+    },
+    {
+      "id": 3,
+      "name": "Charlie",
+      "finalState": "LANDED",
+      "battery": 93,
+      "udp": {
+        "received": 787,
+        "expected": 787,
+        "lossPct": 0,
+        "recentLossPct": 0,
+        "outOfOrder": 0,
+        "jitterMs": 0.49,
+        "rttMs": 1.62,
+        "simLossPct": 0
+      },
+      "tcp": {
+        "rttMs": 1.93,
+        "reconnects": 1,
+        "queued": 0,
+        "lastCommand": {
+          "cmdId": 13,
+          "action": "rth",
+          "status": "done"
+        }
+      },
+      "log": {
+        "logId": "flight-003",
+        "size": 1048576,
+        "acked": 1048576,
+        "status": "done"
+      },
+      "sim": {
+        "reconnects": 1,
+        "telemetrySent": 787,
+        "telemetrySkipped": 0,
+        "executed": 4
+      }
+    },
+    {
+      "id": 4,
+      "name": "Delta",
+      "finalState": "LANDED",
+      "battery": 94,
+      "udp": {
+        "received": 682,
+        "expected": 787,
+        "lossPct": 13.34,
+        "recentLossPct": 16,
+        "outOfOrder": 0,
+        "jitterMs": 0.4,
+        "rttMs": 1.63,
+        "simLossPct": 15
+      },
+      "tcp": {
+        "rttMs": 0.75,
+        "reconnects": 0,
+        "queued": 0,
+        "lastCommand": {
+          "cmdId": 14,
+          "action": "rth",
+          "status": "done"
+        }
+      },
+      "log": null,
+      "sim": {
+        "reconnects": 0,
+        "telemetrySent": 682,
+        "telemetrySkipped": 105,
+        "executed": 4
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "t": 1795759323871,
+      "rel": 0,
+      "level": "info",
+      "text": "Station listening, 4 drones starting"
+    },
+    {
+      "t": 1795759323881,
+      "rel": 0,
+      "level": "info",
+      "text": "Alpha connected (new session 749d31c5)"
+    },
+    {
+      "t": 1795759323884,
+      "rel": 0,
+      "level": "info",
+      "text": "Bravo connected (new session 467c8ed1)"
+    },
+    {
+      "t": 1795759323886,
+      "rel": 0,
+      "level": "info",
+      "text": "Charlie connected (new session b18b2178)"
+    },
+    {
+      "t": 1795759323887,
+      "rel": 0,
+      "level": "info",
+      "text": "Delta connected (new session e2af0ae7)"
+    },
+    {
+      "t": 1795759326872,
+      "rel": 3,
+      "level": "info",
+      "text": "All drones: takeoff (#1 #2 #3 #4)"
+    },
+    {
+      "t": 1795759331871,
+      "rel": 8,
+      "level": "info",
+      "text": "All drones: mission (#5 #6 #7 #8)"
+    },
+    {
+      "t": 1795759335881,
+      "rel": 12,
+      "level": "warn",
+      "text": "Delta UDP loss set to 15 %"
+    },
+    {
+      "t": 1795759339876,
+      "rel": 16,
+      "level": "info",
+      "text": "Charlie flight log flight-003 upload started (1048576 bytes)"
+    },
+    {
+      "t": 1795759342780,
+      "rel": 18.9,
+      "level": "warn",
+      "text": "Charlie flight log at 41 % (425984/1048576 bytes on disk): cutting the link"
+    },
+    {
+      "t": 1795759342780,
+      "rel": 18.9,
+      "level": "warn",
+      "text": "Charlie TCP RST (resetAndDestroy), upload paused"
+    },
+    {
+      "t": 1795759342781,
+      "rel": 18.9,
+      "level": "warn",
+      "text": "Command goto #10 queued for Charlie (link down)"
+    },
+    {
+      "t": 1795759349793,
+      "rel": 25.9,
+      "level": "ok",
+      "text": "Charlie reconnected (session resumed, 1 queued command delivered)"
+    },
+    {
+      "t": 1795759349795,
+      "rel": 25.9,
+      "level": "ok",
+      "text": "Charlie flight log flight-003 resumes at byte 425984 (bytes on disk, LOG_ACK offset)"
+    },
+    {
+      "t": 1795759349796,
+      "rel": 25.9,
+      "level": "ok",
+      "text": "Charlie command goto #10 accepted"
+    },
+    {
+      "t": 1795759353925,
+      "rel": 30.1,
+      "level": "ok",
+      "text": "Charlie flight log flight-003 verified, SHA-256 OK (1048576 bytes, 2a046198b5e5ebb2...)"
+    },
+    {
+      "t": 1795759367871,
+      "rel": 44,
+      "level": "info",
+      "text": "All drones: return home (#11 #12 #13 #14)"
+    },
+    {
+      "t": 1795759409317,
+      "rel": 85.5,
+      "level": "ok",
+      "text": "All drones LANDED"
+    }
+  ]
+}

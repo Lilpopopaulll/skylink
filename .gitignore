@@ -1,8 +1,6 @@
 # Dependencies
 node_modules/
 
-data/
-captures/
 scripts/demo.js
 test/demo.test.js
 tools/wireshark

@@ -1,0 +1,32 @@
+SkyLink demo: 4 drones, 60 s, TCP 127.0.0.1:7400  UDP 127.0.0.1:7401  UI http://127.0.0.1:8400
+Run folder: C:\Projets\SkyLink\data\demo-20261127-145707
+T+  0.0s  Station listening, 4 drones starting
+T+  0.0s  Alpha connected (new session 1898a6e3)
+T+  0.0s  Bravo connected (new session ba1b1196)
+T+  0.0s  Charlie connected (new session 9c831f95)
+T+  0.0s  Delta connected (new session aa19b55a)
+T+  3.0s  All drones: takeoff (#1 #2 #3 #4)
+T+  8.0s  All drones: mission (#5 #6 #7 #8)
+T+ 12.0s  Delta UDP loss set to 15 %
+T+ 16.0s  Charlie flight log flight-003 upload started (1048576 bytes)
+T+ 18.8s  Charlie flight log at 41 % (425984/1048576 bytes on disk): cutting the link
+T+ 18.8s  Charlie TCP RST (resetAndDestroy), upload paused
+T+ 18.9s  Command goto #10 queued for Charlie (link down)
+T+ 20.4s  Charlie reconnected (session resumed, 1 queued command delivered)
+T+ 20.4s  Charlie flight log flight-003 resumes at byte 425984 (bytes on disk, LOG_ACK offset)
+T+ 20.4s  Charlie command goto #10 accepted
+T+ 24.5s  Charlie flight log flight-003 verified, SHA-256 OK (1048576 bytes, 2a046198b5e5ebb2...)
+T+ 44.0s  All drones: return home (#11 #12 #13 #14)
+T+ 88.3s  All drones LANDED
+
+Alpha   telemetry 822/822  loss 0.0%  ooo 0  jitter 0.44 ms  TCP RTT 1.37 ms  UDP RTT 1.64 ms  reconnects 0  log -
+Bravo   telemetry 822/822  loss 0.0%  ooo 0  jitter 0.37 ms  TCP RTT 1.19 ms  UDP RTT 1.58 ms  reconnects 0  log -
+Charlie telemetry 822/822  loss 0.0%  ooo 0  jitter 0.27 ms  TCP RTT 0.46 ms  UDP RTT 1.59 ms  reconnects 1  log flight-003 done
+Delta   telemetry 712/822  loss 13.4%  ooo 0  jitter 0.37 ms  TCP RTT 1.13 ms  UDP RTT 1.61 ms  reconnects 0  log -
+Delta loss measured since the order: 15.4 % (set: 15 %)
+RESULT: OK
+Summary written: C:\Projets\SkyLink\data\demo-20261127-145707\summary.json
+T+ 89.3s  Delta TCP link lost (closed)
+T+ 89.3s  Charlie TCP link lost (closed)
+T+ 89.3s  Bravo TCP link lost (closed)
+T+ 89.3s  Alpha TCP link lost (closed)
