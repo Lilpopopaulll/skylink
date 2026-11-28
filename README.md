@@ -46,7 +46,7 @@ Code: `ALERT` / `ALERT_ACK` in `src/protocol/slcp.js`, detection in `src/sim/inc
 - Node.js 22 or newer. Nothing to install: `npm install` is not needed.
 - Optional: Wireshark with Npcap and "Support loopback traffic" enabled, to look at the frames.
 
-## Try it yourself
+## How to try it
 
 **1. Start the station and the fleet** (two terminals, from the project folder):
 
